@@ -400,7 +400,7 @@ async function renderizarTarefasNoFormulario() {
 }
 
 // === LOGIC & CALCULATIONS ===
-function calculateScore(cold, ifma, ingles, treino, revisao, isModoProva) {
+function calculateScore(cold, ifma, ingles, treino, revisao, isModoProva, pontuacaoDinamica = 0) {
     let score = 0;
     score += cold ? 1 : 0;
     score += ifma ? (isModoProva ? 2 : 1) : 0;
@@ -408,9 +408,11 @@ function calculateScore(cold, ifma, ingles, treino, revisao, isModoProva) {
     score += treino ? 1 : 0;
     score += revisao ? 1 : 0;
 
-    // Cap score at 5 visually even if Modo Prova pushes it to 6, though logic specifically says "IFMA deve ter peso 2 na pontuação".
-    // "5 pontos = Ouro", we'll allow score to be 6 but for Nivel it's >= 5
-    return score;
+    // Adiciona a pontuação proporcional das tarefas dinâmicas validada
+    score += pontuacaoDinamica;
+
+    // Arredonda para 2 casas decimais no máximo
+    return Math.round(score * 100) / 100;
 }
 
 function calculateNivel(score) {
@@ -451,7 +453,6 @@ async function handleFormSubmit(e) {
         return;
     }
 
-    // Preparar os dados para o Supabase
     const dbData = {
         data: dateVal,
         user_id: user.id, // RLS requirement
@@ -462,8 +463,45 @@ async function handleFormSubmit(e) {
         revisao: cbRevisao.checked,
         saiu_do_plano: cbSaiuPlano.checked,
         imprevisto: cbSaiuPlano.checked ? imprevistoInput.value : null,
-        energia: parseInt(energiaInput.value)
+        energia: parseInt(energiaInput.value),
+        pontuacao: 0 // Placeholder, preenchido abaixo
     };
+
+    // --- CÁLCULO DA PONTUAÇÃO DINÂMICA (Fase 4) ---
+    let pontuacaoDinamica = 0;
+    try {
+        const { data: todasTarefas, error: erroTarefas } = await supabaseClient
+            .from('tarefas')
+            .select('peso')
+            .eq('user_id', user.id);
+
+        if (!erroTarefas && todasTarefas) {
+            const pesoTotalUsuario = todasTarefas.reduce((sum, t) => sum + (t.peso || 1), 0);
+
+            if (pesoTotalUsuario > 0) {
+                const checkedTasks = document.querySelectorAll('#tarefasDinamicasContainer input[type="checkbox"]:checked');
+                const pesoConcluido = Array.from(checkedTasks).reduce((sum, cb) => sum + parseInt(cb.dataset.peso || 1), 0);
+
+                pontuacaoDinamica = (pesoConcluido / pesoTotalUsuario) * 5;
+                pontuacaoDinamica = Math.round(pontuacaoDinamica * 100) / 100; // 2 casas
+            }
+        }
+    } catch (innerErr) {
+        console.error("Erro silenciado ao calcular pontuação dinâmica:", innerErr);
+    }
+
+    // Calcula o score final e atualiza dbData.
+    // Lembre-se: O dashboard original recalcula historico usando `calculateScore` com os valores booleanos vindos do banco.
+    // Assim vamos garantir que estamos injetando o score pre-processado.
+    dbData.pontuacao = calculateScore(
+        cbColdCall.checked,
+        cbIfma.checked,
+        cbIngles.checked,
+        cbTreino.checked,
+        cbRevisao.checked,
+        modoProvaAtivo,
+        pontuacaoDinamica
+    );
 
     // Verificar se já existe um registro para esta data localmente
     const existingRecord = records.find(r => r.date === dateVal);
