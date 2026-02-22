@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Performance Pessoal</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="top-nav">
+            <div class="logo">
+                <i class="ph-fill ph-target"></i>
+                <h1>Performance Pessoal</h1>
+            </div>
+            <div class="header-controls">
+                <div class="toggle-container">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="modoProvaToggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">Modo Prova Ativo (IFMA x2)</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="dashboard-grid">
+
+            <!-- Left Column: KPIs and Charts -->
+            <div class="left-panel">
+
+                <!-- 3 Pillars Section -->
+                <section class="kpi-section mb-4" style="margin-bottom: 24px;">
+                    <div class="section-header-flex">
+                        <h2 class="section-title no-mb">Os 3 Pilares da Alta Performance</h2>
+                        <span id="balanceBadge" class="nivel-badge zero" style="font-size: 11px;">Aguardando...</span>
+                    </div>
+                    <div class="kpi-grid">
+                        <div class="kpi-card premium-card pillar-card">
+                            <div class="kpi-icon" style="color: #3b82f6; background: rgba(59, 130, 246, 0.1);"><i
+                                    class="ph ph-briefcase"></i></div>
+                            <div class="kpi-content">
+                                <h3>Negócio</h3>
+                                <div class="pillar-meter">
+                                    <div class="meter-bg">
+                                        <div class="meter-fill bg-blue" id="meter-business" style="width:0%"></div>
+                                    </div>
+                                    <span class="meter-text" id="text-business">0%</span>
+                                </div>
+                                <p class="helper-text">Cold Call</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card pillar-card">
+                            <div class="kpi-icon" style="color: #10b981; background: rgba(16, 185, 129, 0.1);"><i
+                                    class="ph ph-barbell"></i></div>
+                            <div class="kpi-content">
+                                <h3>Corpo</h3>
+                                <div class="pillar-meter">
+                                    <div class="meter-bg">
+                                        <div class="meter-fill bg-emerald" id="meter-body" style="width:0%"></div>
+                                    </div>
+                                    <span class="meter-text" id="text-body">0%</span>
+                                </div>
+                                <p class="helper-text">Treino + Energia</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card pillar-card">
+                            <div class="kpi-icon" style="color: #8b5cf6; background: rgba(139, 92, 246, 0.1);"><i
+                                    class="ph ph-brain"></i></div>
+                            <div class="kpi-content">
+                                <h3>Mente</h3>
+                                <div class="pillar-meter">
+                                    <div class="meter-bg">
+                                        <div class="meter-fill bg-purple" id="meter-mind" style="width:0%"></div>
+                                    </div>
+                                    <span class="meter-text" id="text-mind">0%</span>
+                                </div>
+                                <p class="helper-text">IFMA + Inglês + Rev</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Strategic Pillar Insight -->
+                <div id="strategicInsight" class="strategic-alert" style="display: none;">
+                    <div class="insight-icon"><i class="ph ph-warning-circle"></i></div>
+                    <div class="insight-content">
+                        <h4 id="insightTitle">Alerta Estratégico</h4>
+                        <p id="insightMessage">Analisando os dados...</p>
+                        <div class="insight-action">
+                            <strong>Ação sugerida 24h:</strong> <span id="insightAction">...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <section class="kpi-section">
+                    <h2 class="section-title">Resumo Semanal</h2>
+                    <div class="kpi-grid">
+                        <div class="kpi-card premium-card">
+                            <div class="kpi-icon"><i class="ph ph-trend-up"></i></div>
+                            <div class="kpi-content">
+                                <h3>IPP Semanal</h3>
+                                <p class="kpi-value" id="kpi-ipp">--%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card">
+                            <div class="kpi-icon"><i class="ph ph-check-circle"></i></div>
+                            <div class="kpi-content">
+                                <h3>% Consistência</h3>
+                                <p class="kpi-value" id="kpi-consistency">--%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card">
+                            <div class="kpi-icon"><i class="ph ph-target"></i></div>
+                            <div class="kpi-content">
+                                <h3>% no Plano</h3>
+                                <p class="kpi-value" id="kpi-plan">--%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card">
+                            <div class="kpi-icon"><i class="ph ph-lightning"></i></div>
+                            <div class="kpi-content">
+                                <h3>Média Energia</h3>
+                                <p class="kpi-value" id="kpi-energy">--</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card" style="grid-column: span 2;">
+                            <div class="kpi-icon"><i class="ph ph-fire"></i></div>
+                            <div class="kpi-content">
+                                <h3>Total Dias Fortes</h3>
+                                <p class="kpi-value" id="kpi-dias-fortes">--</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top:4px;">Pont >= 4 | No
+                                    Plano | Energia >= 7</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Energy Behavior Section -->
+                <section class="kpi-section mt-4">
+                    <h2 class="section-title">Comportamento de Energia</h2>
+                    <div class="kpi-grid">
+                        <div class="kpi-card premium-card">
+                            <div class="kpi-icon" style="color: var(--level-ouro); background: rgba(234, 179, 8, 0.1);">
+                                <i class="ph ph-battery-full"></i>
+                            </div>
+                            <div class="kpi-content">
+                                <h3>Média Dias Fortes</h3>
+                                <p class="kpi-value" id="kpi-energy-strong">--</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top:4px;">Ouro/Prata</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card premium-card">
+                            <div class="kpi-icon"
+                                style="color: var(--text-muted); background: rgba(156, 163, 175, 0.1);"><i
+                                    class="ph ph-battery-low"></i></div>
+                            <div class="kpi-content">
+                                <h3>Média Dias Fracos</h3>
+                                <p class="kpi-value" id="kpi-energy-weak">--</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top:4px;">Bronze/Zero</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Charts Section -->
+                <section class="charts-section mt-4">
+                    <div class="chart-row">
+                        <div class="chart-container premium-card">
+                            <h3>Evolução Mensal (Pontuação vs Energia)</h3>
+                            <canvas id="mixedChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-row">
+                        <div class="chart-container premium-card">
+                            <h3>IPP Semanal</h3>
+                            <canvas id="ippChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Monthly Indicators -->
+                <section class="monthly-section premium-card mt-4">
+                    <h2 class="section-title no-mb">Indicadores Mensais (Mês Atual)</h2>
+                    <div class="monthly-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Frequência de Treino</span>
+                            <span class="stat-value" id="monthly-treino">-- dias</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Frequência de Inglês</span>
+                            <span class="stat-value" id="monthly-ingles">-- dias</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Contagem Dias Ouro (Semanal)</span>
+                            <span class="stat-value gold" id="weekly-gold">-- dias</span>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- Right Column: Registration and History -->
+            <div class="right-panel">
+
+                <!-- Daily Registration Form -->
+                <section class="registration-section premium-card form-card">
+                    <h2>Registro Diário</h2>
+                    <form id="dailyForm" class="modern-form">
+
+                        <div class="form-group">
+                            <label for="dataInput">Data</label>
+                            <input type="date" id="dataInput" required>
+                        </div>
+
+                        <div class="checkbox-grid">
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="coldCall">
+                                <span class="checkmark"></span>
+                                <span class="cb-label">Cold Call</span>
+                            </label>
+
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="ifma">
+                                <span class="checkmark"></span>
+                                <span class="cb-label">IFMA</span>
+                            </label>
+
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="ingles">
+                                <span class="checkmark"></span>
+                                <span class="cb-label">Inglês</span>
+                            </label>
+
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="treino">
+                                <span class="checkmark"></span>
+                                <span class="cb-label">Treino</span>
+                            </label>
+
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="revisao">
+                                <span class="checkmark"></span>
+                                <span class="cb-label">Revisão</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group"
+                            style="padding: 12px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius-md);">
+                            <label class="custom-checkbox" style="color: var(--accent-danger);">
+                                <input type="checkbox" id="saiuPlano">
+                                <span class="checkmark"></span>
+                                <span class="cb-label">Saiu do plano hoje?</span>
+                            </label>
+
+                            <div id="imprevistoContainer" style="display: none; margin-top: 12px;">
+                                <label for="imprevistoInput" style="color: var(--text-main);">Imprevisto relevante
+                                    (opcional)</label>
+                                <input type="text" id="imprevistoInput" placeholder="Ex: Viagem de última hora..."
+                                    class="styled-input">
+                            </div>
+                        </div>
+
+                        <div class="form-group energy-slider-container">
+                            <label for="energiaInput">Energia: <span id="energiaValue" class="badge">5</span></label>
+                            <input type="range" id="energiaInput" min="0" max="10" value="5" class="styled-slider">
+                            <div class="slider-labels">
+                                <span>0</span>
+                                <span>10</span>
+                            </div>
+                        </div>
+
+                        <div class="calculated-preview">
+                            <div class="calc-item">
+                                <span>Pontuação Prevista:</span>
+                                <strong id="previewScore">0</strong>
+                            </div>
+                            <div class="calc-item">
+                                <span>Nível Calculado:</span>
+                                <span id="previewNivel" class="nivel-badge zero">Zero</span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="primary-btn">Salvar Registro</button>
+                    </form>
+                </section>
+
+                <!-- History Table -->
+                <section class="history-section premium-card mt-4">
+                    <div class="history-header">
+                        <h2>Histórico Recente</h2>
+                        <button id="clearDataBtn" class="text-btn danger"><i class="ph ph-trash"></i> Limpar
+                            Dados</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="historyTable" class="modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Pont.</th>
+                                    <th>Nível</th>
+                                    <th>Consist.</th>
+                                    <th>No Plano</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <!-- Data populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Main Logic -->
+    <script src="app.js"></script>
+</body>
+
+</html>
