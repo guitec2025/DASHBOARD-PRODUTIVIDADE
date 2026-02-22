@@ -24,6 +24,20 @@ testarConexao();
 // === STATE MANAGEMENT ===
 let records = [];
 let modoProvaAtivo = false;
+let userSession = null;
+
+// === AUTH FUNCTIONS ===
+async function signUp(email, password) {
+    return await supabaseClient.auth.signUp({ email, password });
+}
+
+async function signIn(email, password) {
+    return await supabaseClient.auth.signInWithPassword({ email, password });
+}
+
+async function signOut() {
+    return await supabaseClient.auth.signOut();
+}
 
 async function carregarDados() {
     const { data, error } = await supabaseClient
@@ -70,6 +84,16 @@ async function carregarDados() {
 }
 
 // === DOM ELEMENTS ===
+const loginSection = document.getElementById('loginSection');
+const dashboardSection = document.getElementById('dashboardSection');
+const dashboardHeader = document.getElementById('dashboardHeader');
+const emailInput = document.getElementById('emailInput');
+const passwordInput = document.getElementById('passwordInput');
+const btnSignIn = document.getElementById('btnSignIn');
+const btnSignUp = document.getElementById('btnSignUp');
+const logoutBtn = document.getElementById('logoutBtn');
+const loginError = document.getElementById('loginError');
+
 const dataInput = document.getElementById('dataInput');
 const energiaInput = document.getElementById('energiaInput');
 const energiaValue = document.getElementById('energiaValue');
@@ -121,9 +145,66 @@ const insightAction = document.getElementById('insightAction');
 let mixedChartInst, ippChartInst;
 
 // === INITIALIZATION ===
+async function checkAuth() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    userSession = session;
+
+    if (session) {
+        // Logged in
+        loginSection.style.display = 'none';
+        dashboardSection.style.display = 'grid';
+        dashboardHeader.style.display = 'flex';
+        await carregarDados();
+    } else {
+        // Not logged in
+        loginSection.style.display = 'flex';
+        dashboardSection.style.display = 'none';
+        dashboardHeader.style.display = 'none';
+    }
+}
+
 async function init() {
     // Set today as default date
     dataInput.valueAsDate = new Date();
+
+    // Auth Listeners
+    btnSignIn.addEventListener('click', async () => {
+        const email = emailInput.value;
+        const password = passwordInput.value;
+        if (!email || !password) return showLoginError("Preencha email e senha.");
+
+        btnSignIn.textContent = 'Carregando...';
+        const { data, error } = await signIn(email, password);
+        btnSignIn.textContent = 'Entrar';
+
+        if (error) {
+            showLoginError(error.message);
+        } else {
+            loginError.style.display = 'none';
+            checkAuth();
+        }
+    });
+
+    btnSignUp.addEventListener('click', async () => {
+        const email = emailInput.value;
+        const password = passwordInput.value;
+        if (!email || !password) return showLoginError("Preencha email e senha.");
+
+        btnSignUp.textContent = 'Carregando...';
+        const { data, error } = await signUp(email, password);
+        btnSignUp.textContent = 'Criar Conta';
+
+        if (error) {
+            showLoginError(error.message);
+        } else {
+            showLoginError("Conta criada! Você já pode entrar.", true);
+        }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+        await signOut();
+        checkAuth();
+    });
 
     // Set Listeners
     energiaInput.addEventListener('input', (e) => {
@@ -146,7 +227,13 @@ async function init() {
     dailyForm.addEventListener('submit', handleFormSubmit);
     clearDataBtn.addEventListener('click', confirmClearData);
 
-    await carregarDados();
+    await checkAuth();
+}
+
+function showLoginError(msg, isSuccess = false) {
+    loginError.textContent = msg;
+    loginError.style.color = isSuccess ? 'var(--accent-success)' : 'var(--accent-danger)';
+    loginError.style.display = 'block';
 }
 
 // === LOGIC & CALCULATIONS ===

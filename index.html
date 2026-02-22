@@ -25,7 +25,7 @@
     <div class="app-container">
 
         <!-- Header -->
-        <header class="top-nav">
+        <header class="top-nav" id="dashboardHeader" style="display: none;">
             <div class="logo">
                 <i class="ph-fill ph-target"></i>
                 <h1>Performance Pessoal</h1>
@@ -38,11 +38,41 @@
                     </label>
                     <span class="toggle-label">Modo Prova Ativo (IFMA x2)</span>
                 </div>
+                <button id="logoutBtn" class="text-btn danger" style="margin-left: 16px;">
+                    <i class="ph ph-sign-out"></i> Sair
+                </button>
             </div>
         </header>
 
+        <!-- Login Section -->
+        <main id="loginSection" class="login-container">
+            <div class="premium-card form-card login-card">
+                <div class="logo" style="justify-content: center; margin-bottom: 24px;">
+                    <i class="ph-fill ph-target"></i>
+                    <h2>Acesso Restrito</h2>
+                </div>
+                <form id="loginForm" class="modern-form">
+                    <div class="form-group">
+                        <label for="emailInput">E-mail</label>
+                        <input type="email" id="emailInput" class="styled-input" required placeholder="seu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="passwordInput">Senha</label>
+                        <input type="password" id="passwordInput" class="styled-input" required placeholder="••••••••">
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 8px;">
+                        <button type="button" id="btnSignIn" class="primary-btn" style="flex: 1;">Entrar</button>
+                        <button type="button" id="btnSignUp" class="secondary-btn" style="flex: 1;">Criar Conta</button>
+                    </div>
+                    <p id="loginError"
+                        style="color: var(--accent-danger); font-size: 13px; text-align: center; margin-top: 12px; display: none;">
+                    </p>
+                </form>
+            </div>
+        </main>
+
         <!-- Main Content Grid -->
-        <main class="dashboard-grid">
+        <main class="dashboard-grid" id="dashboardSection" style="display: none;">
 
             <!-- Left Column: KPIs and Charts -->
             <div class="left-panel">
