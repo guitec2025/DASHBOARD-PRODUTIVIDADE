@@ -1,6 +1,73 @@
+const SUPABASE_URL = "https://igasvgxnbetpxexqqyfp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_pnU6nOZUuP4FGA7gyy6rrA_zB1ptFGN";
+
+const supabaseClient = supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+);
+
+async function testarConexao() {
+    const { data, error } = await supabaseClient
+        .from("registro_diario")
+        .select("*")
+        .limit(1);
+
+    if (error) {
+        console.error("Erro conexão:", error);
+    } else {
+        console.log("Conectado com sucesso:", data);
+    }
+}
+
+testarConexao();
+
 // === STATE MANAGEMENT ===
-let records = JSON.parse(localStorage.getItem('perfRecords')) || [];
+let records = [];
 let modoProvaAtivo = false;
+
+async function carregarDados() {
+    const { data, error } = await supabaseClient
+        .from("registro_diario")
+        .select("*")
+        .order("data", { ascending: true });
+
+    if (error) {
+        console.error("Erro ao carregar dados:", error);
+        return;
+    }
+
+    // atualizar estado interno do dashboard
+    records = data.map(dbRecord => {
+        const isModoProva = false; // Supabase table has no modo_prova by user snippet
+        const score = calculateScore(
+            dbRecord.cold_call,
+            dbRecord.ifma,
+            dbRecord.ingles,
+            dbRecord.treino,
+            dbRecord.revisao,
+            isModoProva
+        );
+
+        return {
+            id: dbRecord.id, // Supabase id
+            date: dbRecord.data,
+            cold: dbRecord.cold_call,
+            ifma: dbRecord.ifma,
+            ingles: dbRecord.ingles,
+            treino: dbRecord.treino,
+            revisao: dbRecord.revisao,
+            saiuPlano: dbRecord.saiu_do_plano,
+            imprevisto: dbRecord.imprevisto || '',
+            energia: dbRecord.energia,
+            score: score,
+            nivel: calculateNivel(score),
+            consistente: score >= 4 && !dbRecord.saiu_do_plano ? 1 : 0,
+            modoProva: isModoProva
+        };
+    });
+
+    updateUI();
+}
 
 // === DOM ELEMENTS ===
 const dataInput = document.getElementById('dataInput');
@@ -54,7 +121,7 @@ const insightAction = document.getElementById('insightAction');
 let mixedChartInst, ippChartInst;
 
 // === INITIALIZATION ===
-function init() {
+async function init() {
     // Set today as default date
     dataInput.valueAsDate = new Date();
 
@@ -79,7 +146,7 @@ function init() {
     dailyForm.addEventListener('submit', handleFormSubmit);
     clearDataBtn.addEventListener('click', confirmClearData);
 
-    updateUI();
+    await carregarDados();
 }
 
 // === LOGIC & CALCULATIONS ===
@@ -120,79 +187,95 @@ function updatePreview() {
 }
 
 // === DATA HANDLING ===
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
     e.preventDefault();
 
     const dateVal = dataInput.value;
     if (!dateVal) return alert("Selecione uma data.");
 
-    // Check if entry for this date already exists
-    const existingIndex = records.findIndex(r => r.date === dateVal);
-
-    const score = calculateScore(
-        cbColdCall.checked,
-        cbIfma.checked,
-        cbIngles.checked,
-        cbTreino.checked,
-        cbRevisao.checked,
-        modoProvaAtivo
-    );
-
-    const newRecord = {
-        id: existingIndex >= 0 ? records[existingIndex].id : Date.now().toString(),
-        date: dateVal,
-        cold: cbColdCall.checked,
+    // Preparar os dados para o Supabase
+    const dbData = {
+        data: dateVal,
+        cold_call: cbColdCall.checked,
         ifma: cbIfma.checked,
         ingles: cbIngles.checked,
         treino: cbTreino.checked,
         revisao: cbRevisao.checked,
-        saiuPlano: cbSaiuPlano.checked,
-        imprevisto: cbSaiuPlano.checked ? imprevistoInput.value : '',
-        energia: parseInt(energiaInput.value),
-        score: score,
-        nivel: calculateNivel(score),
-        consistente: score >= 4 && !cbSaiuPlano.checked ? 1 : 0,
-        modoProva: modoProvaAtivo
+        saiu_do_plano: cbSaiuPlano.checked,
+        imprevisto: cbSaiuPlano.checked ? imprevistoInput.value : null,
+        energia: parseInt(energiaInput.value)
     };
 
-    if (existingIndex >= 0) {
-        records[existingIndex] = newRecord;
-    } else {
-        records.push(newRecord);
+    // Verificar se já existe um registro para esta data localmente
+    const existingRecord = records.find(r => r.date === dateVal);
+
+    try {
+        if (existingRecord && existingRecord.id) {
+            // Update
+            const { error } = await supabaseClient
+                .from("registro_diario")
+                .update(dbData)
+                .eq("id", existingRecord.id);
+
+            if (error) throw error;
+        } else {
+            // Insert
+            const { error } = await supabaseClient
+                .from("registro_diario")
+                .insert([dbData]);
+
+            if (error) throw error;
+        }
+
+        // Recarregar os dados do banco e atualizar a UI
+        await carregarDados();
+
+        // Reset form briefly but keep date
+        dailyForm.reset();
+        dataInput.value = dateVal;
+        energiaValue.textContent = '5';
+        imprevistoContainer.style.display = 'none';
+        updatePreview();
+
+    } catch (err) {
+        console.error("Erro ao salvar no Supabase:", err);
+        alert("Ocorreu um erro ao salvar o registro no banco de dados.");
     }
-
-    // Sort by date ascending
-    records.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    saveData();
-    updateUI();
-
-    // Reset form briefly but keep date
-    dailyForm.reset();
-    dataInput.value = dateVal;
-    energiaValue.textContent = '5';
-    imprevistoContainer.style.display = 'none';
-    updatePreview();
 }
 
-function deleteRecord(id) {
+async function deleteRecord(id) {
     if (confirm("Tem certeza que deseja excluir este registro?")) {
-        records = records.filter(r => r.id !== id);
-        saveData();
-        updateUI();
+        try {
+            const { error } = await supabaseClient
+                .from("registro_diario")
+                .delete()
+                .eq("id", id);
+
+            if (error) throw error;
+            await carregarDados();
+        } catch (err) {
+            console.error("Erro ao excluir do Supabase:", err);
+            alert("Erro ao excluir o registro.");
+        }
     }
 }
 
-function confirmClearData() {
+async function confirmClearData() {
     if (confirm("ATENÇÃO: Deseja apagar TODO o histórico? Esta ação não pode ser desfeita.")) {
-        records = [];
-        saveData();
-        updateUI();
-    }
-}
+        try {
+            // Remove todos os registros validos (data is not null)
+            const { error } = await supabaseClient
+                .from("registro_diario")
+                .delete()
+                .not("data", "is", null);
 
-function saveData() {
-    localStorage.setItem('perfRecords', JSON.stringify(records));
+            if (error) throw error;
+            await carregarDados();
+        } catch (err) {
+            console.error("Erro ao limpar dados do Supabase:", err);
+            alert("Erro ao limpar o histórico.");
+        }
+    }
 }
 
 // === UI UPDATES ===
