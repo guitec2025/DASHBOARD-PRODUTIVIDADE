@@ -116,6 +116,7 @@ const btnSalvarTarefa = document.getElementById('btnSalvarTarefa');
 const novaTarefaNome = document.getElementById('novaTarefaNome');
 const novaTarefaPeso = document.getElementById('novaTarefaPeso');
 const listaTarefas = document.getElementById('listaTarefas');
+const tarefasDinamicasContainer = document.getElementById('tarefasDinamicasContainer');
 
 const previewScore = document.getElementById('previewScore');
 const previewNivel = document.getElementById('previewNivel');
@@ -164,6 +165,7 @@ async function checkAuth() {
         dashboardSection.style.display = 'grid';
         dashboardHeader.style.display = 'flex';
         await carregarDados();
+        await renderizarTarefasNoFormulario();
     } else {
         // Not logged in
         loginSection.style.display = 'flex';
@@ -261,6 +263,7 @@ async function init() {
             novaTarefaNome.value = '';
             novaTarefaPeso.value = '1';
             await carregarTarefas();
+            await renderizarTarefasNoFormulario();
         }
     });
 
@@ -347,8 +350,53 @@ async function deletarTarefa(id) {
             alert("Erro ao excluir a tarefa.");
         } else {
             await carregarTarefas();
+            await renderizarTarefasNoFormulario();
         }
     }
+}
+
+async function renderizarTarefasNoFormulario() {
+    if (!userSession) return;
+
+    // Buscar tarefas ativas do usuário
+    const { data, error } = await supabaseClient
+        .from('tarefas')
+        .select('*')
+        .eq('user_id', userSession.user.id)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error("Erro ao carregar tarefas dinâmicas: ", error);
+        return;
+    }
+
+    // Limpar container e esconder por padrão
+    tarefasDinamicasContainer.innerHTML = '';
+    tarefasDinamicasContainer.style.display = 'none';
+
+    // Se não houver tarefas criadas, não exibir o container
+    if (!data || data.length === 0) {
+        return;
+    }
+
+    // Como há tarefas, exibir o container
+    tarefasDinamicasContainer.style.display = 'grid';
+
+    // Renderizar os checkboxes com data-id e data-peso
+    data.forEach(tarefa => {
+        const label = document.createElement('label');
+        label.className = 'custom-checkbox';
+
+        label.innerHTML = `
+            <input type="checkbox" class="dynamic-task-cb" data-id="${tarefa.id}" data-peso="${tarefa.peso}">
+            <span class="checkmark"></span>
+            <span class="cb-label">${tarefa.nome}
+                ${tarefa.peso > 1 ? `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(${tarefa.peso}x)</span>` : ''}
+            </span>
+        `;
+
+        tarefasDinamicasContainer.appendChild(label);
+    });
 }
 
 // === LOGIC & CALCULATIONS ===
@@ -421,6 +469,8 @@ async function handleFormSubmit(e) {
     const existingRecord = records.find(r => r.date === dateVal);
 
     try {
+        let currentRegistroId = null;
+
         if (existingRecord && existingRecord.id) {
             // Update
             const { error } = await supabaseClient
@@ -430,13 +480,52 @@ async function handleFormSubmit(e) {
                 .eq("user_id", user.id); // Boa prática de segurança
 
             if (error) throw error;
+            currentRegistroId = existingRecord.id;
         } else {
             // Insert
-            const { error } = await supabaseClient
+            const { data: insertedData, error } = await supabaseClient
                 .from("registro_diario")
-                .insert([dbData]);
+                .insert([dbData])
+                .select(); // Requerido para pegar o ID retornado
 
             if (error) throw error;
+            if (insertedData && insertedData.length > 0) {
+                currentRegistroId = insertedData[0].id;
+            }
+        }
+
+        // --- SALVAR EXECUÇÕES DE TAREFAS DINÂMICAS ---
+        if (currentRegistroId) {
+            try {
+                // 1. Apagar execuções antigas para evitar duplicidades em caso de update do mesmo dia
+                await supabaseClient
+                    .from('execucao_tarefa')
+                    .delete()
+                    .eq('registro_id', currentRegistroId);
+
+                // 2. Coletar checkboxes ativas
+                const checkedTasks = document.querySelectorAll('#tarefasDinamicasContainer input[type="checkbox"]:checked');
+
+                if (checkedTasks.length > 0) {
+                    const execucoes = Array.from(checkedTasks).map(cb => ({
+                        registro_id: currentRegistroId,
+                        tarefa_id: cb.dataset.id,
+                        user_id: user.id,
+                        concluida: true
+                    }));
+
+                    // 3. Inserir execuções mapeadas
+                    const { error: execError } = await supabaseClient
+                        .from('execucao_tarefa')
+                        .insert(execucoes);
+
+                    if (execError) {
+                        console.error("Erro silencioso ao salvar execucao_tarefa:", execError);
+                    }
+                }
+            } catch (innerErr) {
+                console.error("Exceção silenciosa nas tarefas dinâmicas:", innerErr);
+            }
         }
 
         // Recarregar os dados do banco e atualizar a UI
