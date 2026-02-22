@@ -108,6 +108,15 @@ const cbSaiuPlano = document.getElementById('saiuPlano');
 const imprevistoContainer = document.getElementById('imprevistoContainer');
 const imprevistoInput = document.getElementById('imprevistoInput');
 
+// Dynamic Tasks Elements
+const btnGerenciarTarefas = document.getElementById('btnGerenciarTarefas');
+const modalTarefas = document.getElementById('modalTarefas');
+const btnFecharModal = document.getElementById('btnFecharModal');
+const btnSalvarTarefa = document.getElementById('btnSalvarTarefa');
+const novaTarefaNome = document.getElementById('novaTarefaNome');
+const novaTarefaPeso = document.getElementById('novaTarefaPeso');
+const listaTarefas = document.getElementById('listaTarefas');
+
 const previewScore = document.getElementById('previewScore');
 const previewNivel = document.getElementById('previewNivel');
 const tableBody = document.getElementById('tableBody');
@@ -206,6 +215,55 @@ async function init() {
         checkAuth();
     });
 
+    // --- Dynamic Tasks Modals Listeners ---
+    btnGerenciarTarefas.addEventListener('click', () => {
+        modalTarefas.classList.remove('hidden');
+        carregarTarefas();
+    });
+
+    btnFecharModal.addEventListener('click', () => {
+        modalTarefas.classList.add('hidden');
+    });
+
+    modalTarefas.addEventListener('click', (e) => {
+        if (e.target === modalTarefas) {
+            modalTarefas.classList.add('hidden');
+        }
+    });
+
+    btnSalvarTarefa.addEventListener('click', async () => {
+        const nome = novaTarefaNome.value.trim();
+        const peso = parseInt(novaTarefaPeso.value);
+
+        if (!nome) return alert("Digite o nome da tarefa.");
+        if (isNaN(peso) || peso < 1) return alert("Peso inválido.");
+
+        if (!userSession) return alert("Sessão expirada. Faça login novamente.");
+
+        btnSalvarTarefa.textContent = '...';
+        btnSalvarTarefa.disabled = true;
+
+        const { error } = await supabaseClient
+            .from('tarefas')
+            .insert([{
+                nome: nome,
+                peso: peso,
+                user_id: userSession.user.id
+            }]);
+
+        btnSalvarTarefa.textContent = 'Salvar';
+        btnSalvarTarefa.disabled = false;
+
+        if (error) {
+            console.error("Erro ao salvar tarefa:", error);
+            alert("Erro ao salvar tarefa.");
+        } else {
+            novaTarefaNome.value = '';
+            novaTarefaPeso.value = '1';
+            await carregarTarefas();
+        }
+    });
+
     // Set Listeners
     energiaInput.addEventListener('input', (e) => {
         energiaValue.textContent = e.target.value;
@@ -234,6 +292,63 @@ function showLoginError(msg, isSuccess = false) {
     loginError.textContent = msg;
     loginError.style.color = isSuccess ? 'var(--accent-success)' : 'var(--accent-danger)';
     loginError.style.display = 'block';
+}
+
+// === DYNAMIC TASKS LOGIC ===
+async function carregarTarefas() {
+    listaTarefas.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 12px;">Carregando tarefas...</p>';
+
+    if (!userSession) return;
+
+    const { data, error } = await supabaseClient
+        .from('tarefas')
+        .select('*')
+        .eq('user_id', userSession.user.id)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error("Erro ao carregar tarefas:", error);
+        listaTarefas.innerHTML = '<p style="color: var(--accent-danger); font-size: 13px; text-align: center; padding: 12px;">Erro ao carregar tarefas.</p>';
+        return;
+    }
+
+    listaTarefas.innerHTML = '';
+
+    if (data.length === 0) {
+        listaTarefas.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 12px;">Nenhuma tarefa encontrada.</p>';
+        return;
+    }
+
+    data.forEach(tarefa => {
+        const item = document.createElement('div');
+        item.className = 'tarefa-item';
+        item.innerHTML = `
+            <div class="tarefa-details">
+                <span class="tarefa-name">${tarefa.nome}</span>
+                <span class="tarefa-peso">Peso: ${tarefa.peso}</span>
+            </div>
+            <button type="button" class="action-btn" onclick="deletarTarefa('${tarefa.id}')" title="Excluir">
+                <i class="ph ph-trash"></i>
+            </button>
+        `;
+        listaTarefas.appendChild(item);
+    });
+}
+
+async function deletarTarefa(id) {
+    if (confirm("Deseja realmente excluir esta tarefa?")) {
+        const { error } = await supabaseClient
+            .from('tarefas')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error("Erro ao deletar tarefa:", error);
+            alert("Erro ao excluir a tarefa.");
+        } else {
+            await carregarTarefas();
+        }
+    }
 }
 
 // === LOGIC & CALCULATIONS ===

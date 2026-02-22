@@ -254,7 +254,13 @@
 
                 <!-- Daily Registration Form -->
                 <section class="registration-section premium-card form-card">
-                    <h2>Registro Diário</h2>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2 class="no-mb">Registro Diário</h2>
+                        <button type="button" id="btnGerenciarTarefas" class="secondary-btn"
+                            style="padding: 8px 16px; font-size: 14px; display: flex; align-items: center; gap: 8px;"><i
+                                class="ph ph-file-text"></i> Gerenciar Tarefas</button>
+                    </div>
                     <form id="dailyForm" class="modern-form">
 
                         <div class="form-group">
@@ -362,6 +368,42 @@
 
             </div>
         </main>
+    </div>
+
+    <!-- Tarefas Modal -->
+    <div id="modalTarefas" class="modal hidden">
+        <div class="modal-content premium-card">
+            <div class="modal-header">
+                <h2 class="no-mb">Gerenciar Tarefas</h2>
+                <button id="btnFecharModal" class="action-btn" style="font-size: 20px;"><i class="ph ph-x"></i></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group" style="display: flex; gap: 12px; align-items: flex-end;">
+                    <div style="flex: 2;">
+                        <label for="novaTarefaNome">Nome da Tarefa</label>
+                        <input type="text" id="novaTarefaNome" class="styled-input" placeholder="Ex: Ler 10 páginas">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="novaTarefaPeso">Peso</label>
+                        <input type="number" id="novaTarefaPeso" class="styled-input" value="1" min="1">
+                    </div>
+                    <div>
+                        <button type="button" id="btnSalvarTarefa" class="primary-btn"
+                            style="padding: 10px 16px;">Salvar</button>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h3 style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">Suas Tarefas</h3>
+                    <div id="listaTarefas" class="tarefas-list">
+                        <!-- Tarefas dinâmicas aqui -->
+                        <p style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 12px;">
+                            Carregando tarefas...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Main Logic -->
