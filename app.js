@@ -280,9 +280,18 @@ async function handleFormSubmit(e) {
     const dateVal = dataInput.value;
     if (!dateVal) return alert("Selecione uma data.");
 
+    // Obter usuário autenticado atual
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+        alert("Sessão expirada. Faça login novamente.");
+        checkAuth();
+        return;
+    }
+
     // Preparar os dados para o Supabase
     const dbData = {
         data: dateVal,
+        user_id: user.id, // RLS requirement
         cold_call: cbColdCall.checked,
         ifma: cbIfma.checked,
         ingles: cbIngles.checked,
@@ -302,7 +311,8 @@ async function handleFormSubmit(e) {
             const { error } = await supabaseClient
                 .from("registro_diario")
                 .update(dbData)
-                .eq("id", existingRecord.id);
+                .eq("id", existingRecord.id)
+                .eq("user_id", user.id); // Boa prática de segurança
 
             if (error) throw error;
         } else {
