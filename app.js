@@ -114,6 +114,7 @@ const modalTarefas = document.getElementById('modalTarefas');
 const btnFecharModal = document.getElementById('btnFecharModal');
 const btnSalvarTarefa = document.getElementById('btnSalvarTarefa');
 const novaTarefaNome = document.getElementById('novaTarefaNome');
+const novaTarefaCategoria = document.getElementById('novaTarefaCategoria');
 const novaTarefaPeso = document.getElementById('novaTarefaPeso');
 const listaTarefas = document.getElementById('listaTarefas');
 const tarefasDinamicasContainer = document.getElementById('tarefasDinamicasContainer');
@@ -235,6 +236,7 @@ async function init() {
 
     btnSalvarTarefa.addEventListener('click', async () => {
         const nome = novaTarefaNome.value.trim();
+        const categoria = novaTarefaCategoria.value;
         const peso = parseInt(novaTarefaPeso.value);
 
         if (!nome) return alert("Digite o nome da tarefa.");
@@ -249,6 +251,7 @@ async function init() {
             .from('tarefas')
             .insert([{
                 nome: nome,
+                categoria: categoria,
                 peso: peso,
                 user_id: userSession.user.id
             }]);
@@ -261,6 +264,7 @@ async function init() {
             alert("Erro ao salvar tarefa.");
         } else {
             novaTarefaNome.value = '';
+            novaTarefaCategoria.value = 'negocio';
             novaTarefaPeso.value = '1';
             await carregarTarefas();
             await renderizarTarefasNoFormulario();
@@ -325,9 +329,18 @@ async function carregarTarefas() {
     data.forEach(tarefa => {
         const item = document.createElement('div');
         item.className = 'tarefa-item';
+
+        // Transformar value 'negocio' em 'Negócio' visualmente
+        const catVisuais = {
+            'negocio': 'Negócio',
+            'corpo': 'Corpo',
+            'mente': 'Mente'
+        };
+        const catNome = catVisuais[tarefa.categoria] || tarefa.categoria;
+
         item.innerHTML = `
             <div class="tarefa-details">
-                <span class="tarefa-name">${tarefa.nome}</span>
+                <span class="tarefa-name">${tarefa.nome} <span style="font-size:10px; color:var(--text-muted); margin-left:4px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px;">${catNome}</span></span>
                 <span class="tarefa-peso">Peso: ${tarefa.peso}</span>
             </div>
             <button type="button" class="action-btn" onclick="deletarTarefa('${tarefa.id}')" title="Excluir">
@@ -382,13 +395,13 @@ async function renderizarTarefasNoFormulario() {
     // Como há tarefas, exibir o container
     tarefasDinamicasContainer.style.display = 'grid';
 
-    // Renderizar os checkboxes com data-id e data-peso
+    // Renderizar os checkboxes com data-id, data-peso e data-categoria
     data.forEach(tarefa => {
         const label = document.createElement('label');
         label.className = 'custom-checkbox';
 
         label.innerHTML = `
-            <input type="checkbox" class="dynamic-task-cb" data-id="${tarefa.id}" data-peso="${tarefa.peso}">
+            <input type="checkbox" class="dynamic-task-cb" data-id="${tarefa.id}" data-peso="${tarefa.peso}" data-categoria="${tarefa.categoria}">
             <span class="checkmark"></span>
             <span class="cb-label">${tarefa.nome}
                 ${tarefa.peso > 1 ? `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(${tarefa.peso}x)</span>` : ''}
@@ -721,29 +734,46 @@ function updateKPIs() {
     // Total Dias Fortes (Weekly)
     const weeklyDiasFortes = weeklyRecords.filter(r => r.score >= 4 && !r.saiuPlano && r.energia >= 7).length;
 
-    // 3 PILLARS CALCULATION (Weekly based, max 5 days so denominator is usually length or 5)
-    // We will use 5 days as the standard week goal denominator
-    const totalDaysTarget = 5;
+    // 3 PILLARS CALCULATION (Modular & Proportional)
+    // Inicializamos os totais por categoria
+    let pesosTotais = { negocio: 0, corpo: 0, mente: 0 };
+    let pesosConcluidos = { negocio: 0, corpo: 0, mente: 0 };
 
-    // Pillar 1: Negócio (% Cold Call)
-    const coldCallDays = weeklyRecords.reduce((sum, r) => sum + (r.cold ? 1 : 0), 0);
-    const percBusiness = Math.min((coldCallDays / totalDaysTarget) * 100, 100);
+    // Percorrer os checkboxes dinâmicos do formulário para capturar o estado ATUAL
+    const dynamicCheckboxes = document.querySelectorAll('.dynamic-task-cb');
+    dynamicCheckboxes.forEach(cb => {
+        const peso = parseInt(cb.dataset.peso || 1);
+        const cat = cb.dataset.categoria;
 
-    // Pillar 2: Corpo (% Treino + Avg Energy converted to %) / 2
-    const treinoDays = weeklyRecords.reduce((sum, r) => sum + (r.treino ? 1 : 0), 0);
-    const percTreino = Math.min((treinoDays / totalDaysTarget) * 100, 100);
+        if (pesosTotais.hasOwnProperty(cat)) {
+            pesosTotais[cat] += peso;
+            if (cb.checked) {
+                pesosConcluidos[cat] += peso;
+            }
+        }
+    });
+
+    // Pilar 1: Negócio
+    let percBusiness = pesosTotais.negocio > 0
+        ? (pesosConcluidos.negocio / pesosTotais.negocio) * 100
+        : (weeklyRecords.reduce((sum, r) => sum + (r.cold ? 1 : 0), 0) / 5) * 100;
+
+    // Pilar 2: Corpo
+    let percTreinoBase = pesosTotais.corpo > 0
+        ? (pesosConcluidos.corpo / pesosTotais.corpo) * 100
+        : (weeklyRecords.reduce((sum, r) => sum + (r.treino ? 1 : 0), 0) / 5) * 100;
     const percEnergy = Math.min((avgEnergy / 10) * 100, 100);
-    const percBody = (percTreino + percEnergy) / 2;
+    const percBody = (percTreinoBase + percEnergy) / 2;
 
-    // Pillar 3: Mente (% IFMA + Inglês + Revisão) / 300 * 100
-    const ifmaDays = weeklyRecords.reduce((sum, r) => sum + (r.ifma ? 1 : 0), 0);
-    const englishDays = weeklyRecords.reduce((sum, r) => sum + (r.ingles ? 1 : 0), 0);
-    const reviewDays = weeklyRecords.reduce((sum, r) => sum + (r.revisao ? 1 : 0), 0);
+    // Pilar 3: Mente
+    let percMind = pesosTotais.mente > 0
+        ? (pesosConcluidos.mente / pesosTotais.mente) * 100
+        : ((weeklyRecords.reduce((sum, r) => sum + (r.ifma ? 1 : 0), 0) / 5) * 100 +
+            (weeklyRecords.reduce((sum, r) => sum + (r.ingles ? 1 : 0), 0) / 5) * 100 +
+            (weeklyRecords.reduce((sum, r) => sum + (r.revisao ? 1 : 0), 0) / 5) * 100) / 3;
 
-    const percIfma = Math.min((ifmaDays / totalDaysTarget) * 100, 100);
-    const percEnglish = Math.min((englishDays / totalDaysTarget) * 100, 100);
-    const percReview = Math.min((reviewDays / totalDaysTarget) * 100, 100);
-    const percMind = (percIfma + percEnglish + percReview) / 3;
+    percBusiness = Math.min(percBusiness, 100);
+    percMind = Math.min(percMind, 100);
 
     // Balance check
     const pillars = [
