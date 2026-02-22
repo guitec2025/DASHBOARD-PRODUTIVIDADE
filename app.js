@@ -23,7 +23,6 @@ testarConexao();
 
 // === STATE MANAGEMENT ===
 let records = [];
-let modoProvaAtivo = false;
 let userSession = null;
 
 // === AUTH FUNCTIONS ===
@@ -52,31 +51,18 @@ async function carregarDados() {
 
     // atualizar estado interno do dashboard
     records = data.map(dbRecord => {
-        const isModoProva = false; // Supabase table has no modo_prova by user snippet
-        const score = calculateScore(
-            dbRecord.cold_call,
-            dbRecord.ifma,
-            dbRecord.ingles,
-            dbRecord.treino,
-            dbRecord.revisao,
-            isModoProva
-        );
+        // Usa a pontuação salva no banco (calculada no momento do registro)
+        const score = dbRecord.pontuacao || 0;
 
         return {
-            id: dbRecord.id, // Supabase id
+            id: dbRecord.id,
             date: dbRecord.data,
-            cold: dbRecord.cold_call,
-            ifma: dbRecord.ifma,
-            ingles: dbRecord.ingles,
-            treino: dbRecord.treino,
-            revisao: dbRecord.revisao,
             saiuPlano: dbRecord.saiu_do_plano,
             imprevisto: dbRecord.imprevisto || '',
             energia: dbRecord.energia,
             score: score,
             nivel: calculateNivel(score),
-            consistente: score >= 4 && !dbRecord.saiu_do_plano ? 1 : 0,
-            modoProva: isModoProva
+            consistente: score >= 4 && !dbRecord.saiu_do_plano ? 1 : 0
         };
     });
 
@@ -97,13 +83,7 @@ const loginError = document.getElementById('loginError');
 const dataInput = document.getElementById('dataInput');
 const energiaInput = document.getElementById('energiaInput');
 const energiaValue = document.getElementById('energiaValue');
-const modoProvaToggle = document.getElementById('modoProvaToggle');
 const dailyForm = document.getElementById('dailyForm');
-const cbColdCall = document.getElementById('coldCall');
-const cbIfma = document.getElementById('ifma');
-const cbIngles = document.getElementById('ingles');
-const cbTreino = document.getElementById('treino');
-const cbRevisao = document.getElementById('revisao');
 const cbSaiuPlano = document.getElementById('saiuPlano');
 const imprevistoContainer = document.getElementById('imprevistoContainer');
 const imprevistoInput = document.getElementById('imprevistoInput');
@@ -276,18 +256,10 @@ async function init() {
         energiaValue.textContent = e.target.value;
     });
 
-    modoProvaToggle.addEventListener('change', (e) => {
-        modoProvaAtivo = e.target.checked;
-        updatePreview();
-    });
-
     cbSaiuPlano.addEventListener('change', (e) => {
         imprevistoContainer.style.display = e.target.checked ? 'block' : 'none';
         if (!e.target.checked) imprevistoInput.value = '';
     });
-
-    const checkboxes = [cbColdCall, cbIfma, cbIngles, cbTreino, cbRevisao];
-    checkboxes.forEach(cb => cb.addEventListener('change', updatePreview));
 
     dailyForm.addEventListener('submit', handleFormSubmit);
     clearDataBtn.addEventListener('click', confirmClearData);
@@ -413,18 +385,25 @@ async function renderizarTarefasNoFormulario() {
 }
 
 // === LOGIC & CALCULATIONS ===
-function calculateScore(cold, ifma, ingles, treino, revisao, isModoProva, pontuacaoDinamica = 0) {
-    let score = 0;
-    score += cold ? 1 : 0;
-    score += ifma ? (isModoProva ? 2 : 1) : 0;
-    score += ingles ? 1 : 0;
-    score += treino ? 1 : 0;
-    score += revisao ? 1 : 0;
+async function calculateDynamicScore() {
+    if (!userSession) return 0;
 
-    // Adiciona a pontuação proporcional das tarefas dinâmicas validada
-    score += pontuacaoDinamica;
+    // Buscar pesos totais do usuário
+    const { data: todasTarefas, error } = await supabaseClient
+        .from('tarefas')
+        .select('peso')
+        .eq('user_id', userSession.user.id);
 
-    // Arredonda para 2 casas decimais no máximo
+    if (error || !todasTarefas || todasTarefas.length === 0) return 0;
+
+    const pesoTotalUsuario = todasTarefas.reduce((sum, t) => sum + (t.peso || 1), 0);
+    if (pesoTotalUsuario === 0) return 0;
+
+    // Somar pesos das tarefas marcadas no formulário
+    const checkedTasks = document.querySelectorAll('#tarefasDinamicasContainer input[type="checkbox"]:checked');
+    const pesoConcluido = Array.from(checkedTasks).reduce((sum, cb) => sum + parseInt(cb.dataset.peso || 1), 0);
+
+    const score = (pesoConcluido / pesoTotalUsuario) * 5;
     return Math.round(score * 100) / 100;
 }
 
@@ -435,16 +414,8 @@ function calculateNivel(score) {
     return { text: 'Zero', class: 'zero' };
 }
 
-function updatePreview() {
-    const score = calculateScore(
-        cbColdCall.checked,
-        cbIfma.checked,
-        cbIngles.checked,
-        cbTreino.checked,
-        cbRevisao.checked,
-        modoProvaAtivo
-    );
-
+async function updatePreview() {
+    const score = await calculateDynamicScore();
     previewScore.textContent = score;
     const nivel = calculateNivel(score);
     previewNivel.textContent = nivel.text;
@@ -469,52 +440,14 @@ async function handleFormSubmit(e) {
     const dbData = {
         data: dateVal,
         user_id: user.id, // RLS requirement
-        cold_call: cbColdCall.checked,
-        ifma: cbIfma.checked,
-        ingles: cbIngles.checked,
-        treino: cbTreino.checked,
-        revisao: cbRevisao.checked,
         saiu_do_plano: cbSaiuPlano.checked,
         imprevisto: cbSaiuPlano.checked ? imprevistoInput.value : null,
         energia: parseInt(energiaInput.value),
         pontuacao: 0 // Placeholder, preenchido abaixo
     };
 
-    // --- CÁLCULO DA PONTUAÇÃO DINÂMICA (Fase 4) ---
-    let pontuacaoDinamica = 0;
-    try {
-        const { data: todasTarefas, error: erroTarefas } = await supabaseClient
-            .from('tarefas')
-            .select('peso')
-            .eq('user_id', user.id);
-
-        if (!erroTarefas && todasTarefas) {
-            const pesoTotalUsuario = todasTarefas.reduce((sum, t) => sum + (t.peso || 1), 0);
-
-            if (pesoTotalUsuario > 0) {
-                const checkedTasks = document.querySelectorAll('#tarefasDinamicasContainer input[type="checkbox"]:checked');
-                const pesoConcluido = Array.from(checkedTasks).reduce((sum, cb) => sum + parseInt(cb.dataset.peso || 1), 0);
-
-                pontuacaoDinamica = (pesoConcluido / pesoTotalUsuario) * 5;
-                pontuacaoDinamica = Math.round(pontuacaoDinamica * 100) / 100; // 2 casas
-            }
-        }
-    } catch (innerErr) {
-        console.error("Erro silenciado ao calcular pontuação dinâmica:", innerErr);
-    }
-
-    // Calcula o score final e atualiza dbData.
-    // Lembre-se: O dashboard original recalcula historico usando `calculateScore` com os valores booleanos vindos do banco.
-    // Assim vamos garantir que estamos injetando o score pre-processado.
-    dbData.pontuacao = calculateScore(
-        cbColdCall.checked,
-        cbIfma.checked,
-        cbIngles.checked,
-        cbTreino.checked,
-        cbRevisao.checked,
-        modoProvaAtivo,
-        pontuacaoDinamica
-    );
+    // --- PONTUAÇÃO DINÂMICA: usar calculateDynamicScore() ---
+    dbData.pontuacao = await calculateDynamicScore();
 
     // Verificar se já existe um registro para esta data localmente
     const existingRecord = records.find(r => r.date === dateVal);
@@ -753,27 +686,22 @@ function updateKPIs() {
         }
     });
 
-    // Pilar 1: Negócio
+    // Pilar 1: Negócio (proporcional: pesos concluídos / pesos totais da categoria)
     let percBusiness = pesosTotais.negocio > 0
-        ? (pesosConcluidos.negocio / pesosTotais.negocio) * 100
-        : (weeklyRecords.reduce((sum, r) => sum + (r.cold ? 1 : 0), 0) / 5) * 100;
+        ? Math.min((pesosConcluidos.negocio / pesosTotais.negocio) * 100, 100)
+        : 0;
 
-    // Pilar 2: Corpo
+    // Pilar 2: Corpo (proporcional) + Energia
     let percTreinoBase = pesosTotais.corpo > 0
-        ? (pesosConcluidos.corpo / pesosTotais.corpo) * 100
-        : (weeklyRecords.reduce((sum, r) => sum + (r.treino ? 1 : 0), 0) / 5) * 100;
+        ? Math.min((pesosConcluidos.corpo / pesosTotais.corpo) * 100, 100)
+        : 0;
     const percEnergy = Math.min((avgEnergy / 10) * 100, 100);
     const percBody = (percTreinoBase + percEnergy) / 2;
 
-    // Pilar 3: Mente
+    // Pilar 3: Mente (proporcional)
     let percMind = pesosTotais.mente > 0
-        ? (pesosConcluidos.mente / pesosTotais.mente) * 100
-        : ((weeklyRecords.reduce((sum, r) => sum + (r.ifma ? 1 : 0), 0) / 5) * 100 +
-            (weeklyRecords.reduce((sum, r) => sum + (r.ingles ? 1 : 0), 0) / 5) * 100 +
-            (weeklyRecords.reduce((sum, r) => sum + (r.revisao ? 1 : 0), 0) / 5) * 100) / 3;
-
-    percBusiness = Math.min(percBusiness, 100);
-    percMind = Math.min(percMind, 100);
+        ? Math.min((pesosConcluidos.mente / pesosTotais.mente) * 100, 100)
+        : 0;
 
     // Balance check
     const pillars = [
@@ -788,10 +716,6 @@ function updateKPIs() {
     const maxPillar = sortedPillars[2];
     const imbalance = maxPillar.value - minPillar.value;
 
-    // Monthly Frequencies
-    const freqTreino = monthlyRecords.filter(r => r.treino).length;
-    const freqIngles = monthlyRecords.filter(r => r.ingles).length;
-
     // Update DOM
     kpiIpp.textContent = `${ipp}%`;
     kpiConsistency.textContent = `${consistency}%`;
@@ -802,9 +726,7 @@ function updateKPIs() {
     if (kpiEnergyStrong) kpiEnergyStrong.textContent = avgEnergyStrong;
     if (kpiEnergyWeak) kpiEnergyWeak.textContent = avgEnergyWeak;
 
-    monthlyTreino.textContent = `${freqTreino} dias`;
-    monthlyIngles.textContent = `${freqIngles} dias`;
-    weeklyGold.textContent = `${ouroDays} dias`;
+    if (weeklyGold) weeklyGold.textContent = `${ouroDays} dias`;
 
     // Update Pillars UI
     if (meterBusiness) {
@@ -839,11 +761,11 @@ function updateKPIs() {
 
                 // Provide context-specific action
                 if (minPillar.name === 'Negócio') {
-                    insightAction.textContent = "Agende um bloco de 30-45 minutos inegociáveis para Cold Call amanhã logo no primeiro horário (Eat That Frog).";
+                    insightAction.textContent = "Revise suas tarefas de Negócio e priorize as mais impactantes para amanhã.";
                 } else if (minPillar.name === 'Corpo') {
-                    insightAction.textContent = "Priorize pelo menos 20 min de exercício cardiovascular hoje e foque em recalibrar sua energia para amanhã (sono e hidratação).";
+                    insightAction.textContent = "Priorize pelo menos 20 min de exercício e foque em recalibrar sua energia (sono e hidratação).";
                 } else if (minPillar.name === 'Mente') {
-                    insightAction.textContent = "Desbloqueie pelo menos 1 tarefa mental pendente hoje (IFMA, Inglês ou Revisão) para retomar o controle cognitivo da semana.";
+                    insightAction.textContent = "Desbloqueie pelo menos 1 tarefa mental pendente hoje para retomar o controle cognitivo da semana.";
                 }
             }
 
